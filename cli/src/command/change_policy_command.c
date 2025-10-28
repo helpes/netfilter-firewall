@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <errno.h>
 #include <sys/file.h>
 #include "firewall_config.h"
@@ -15,6 +16,7 @@ bool change_policy_command(
     char *err_msg = "エラー：予期せぬエラーが発生したため、"
                     "ポリシーを変更できませんでした。";
     FILE *config_fp = NULL;
+    FILE *tmp_fp = NULL;
     int fd = -1;
     bool ret = false;
 
@@ -33,7 +35,7 @@ bool change_policy_command(
     }
 
     // ファイルのオープンとロック
-    config_fp = fopen(filepath, "r+");
+    config_fp = fopen(filepath, "r");
     if (config_fp == NULL) {
         goto cleanup;
     }
@@ -44,9 +46,17 @@ bool change_policy_command(
     if (flock(fd, LOCK_EX) == -1) {
         goto cleanup;
     }
+    tmp_fp = fopen(TMP_FIREWALL_CONFIG_FILE, "w+");
+    if (tmp_fp == NULL) {
+        goto cleanup;
+    }
+
+    if (copy_file(config_fp, tmp_fp) == false) {
+        goto cleanup;
+    }
 
     // 設定ファイルの正当性を検証
-    if (is_valid_config_file(config_fp) == FILE_INVALID) {
+    if (is_valid_config_file(tmp_fp) == FILE_INVALID) {
         err_msg = "エラー：設定ファイルが不正な形式のため、"
                   "ポリシーを変更できません。";
         goto cleanup;
@@ -54,7 +64,7 @@ bool change_policy_command(
 
     // ポリシーの変更
     PolicyChangeResult change_result =
-        change_policy(config_fp, target_chain, policy_to_change);
+        change_policy(tmp_fp, target_chain, policy_to_change);
     switch (change_result) {
         case POLICY_CHANGE_SUCCESS:
             break;
@@ -70,10 +80,15 @@ bool change_policy_command(
             break; // NOT REACHED
     }
 
-    // ファイアウォールがファイルを閲覧できるよう、供給ロックに変更
-    if (flock(fd, LOCK_SH) == -1) {
+    fclose(tmp_fp);
+    tmp_fp = NULL;
+    if (rename(TMP_FIREWALL_CONFIG_FILE, filepath) == -1) {
         goto cleanup;
     }
+    flock(fd, LOCK_UN);
+    fclose(config_fp);
+    fd = -1;
+    config_fp = NULL;
 
     // ファイアウォール本体に設定の更新を伝える
     ServerResponse response = send_command_to_server(
@@ -112,6 +127,12 @@ bool change_policy_command(
     }
     if (config_fp != NULL) {
         fclose(config_fp);
+    }
+    if (tmp_fp != NULL) {
+        fclose(tmp_fp);
+    }
+    if (access(TMP_FIREWALL_CONFIG_FILE, F_OK) == 0) {
+        unlink(TMP_FIREWALL_CONFIG_FILE);
     }
     return ret;
 }
