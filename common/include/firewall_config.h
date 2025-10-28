@@ -8,7 +8,9 @@
 #define FIREWALL_CONFIG_DIR "config/"
 #define LOG_DIR "log/"
 #define FIREWALL_CONFIG_FILE "config/firewall.conf"
+#define TMP_FIREWALL_CONFIG_FILE "config/firewall.tmp"
 #define RULE_FILE "config/rules.csv"
+#define TMP_RULE_FILE "config/rules.tmp"
 #define LOG_FILE "log/packet.log"
 #define DOMAIN_SOCKET_PATH "/tmp/firewall.sock"
 #define CHAIN_MAX_LEN 8
