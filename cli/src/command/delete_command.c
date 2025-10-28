@@ -44,8 +44,9 @@ bool delete_command(
     }
 
     // ファイルのオープンとロック
-    rule_fp = fopen(filepath, "r+");
-    if (rule_fp == NULL) {
+    rule_fp = fopen(filepath, "r");
+    tmp_fp = fopen(TMP_RULE_FILE, "w+");
+    if (rule_fp == NULL || tmp_fp == NULL) {
         goto cleanup;
     }
     fd = fileno(rule_fp);
@@ -53,10 +54,6 @@ bool delete_command(
         goto cleanup;
     }
     if (flock(fd, LOCK_EX) == -1) {
-        goto cleanup;
-    }
-    tmp_fp = fopen(TMP_RULE_FILE, "w+");
-    if (tmp_fp == NULL) {
         goto cleanup;
     }
 

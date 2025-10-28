@@ -36,7 +36,8 @@ bool change_policy_command(
 
     // ファイルのオープンとロック
     config_fp = fopen(filepath, "r");
-    if (config_fp == NULL) {
+    tmp_fp = fopen(TMP_FIREWALL_CONFIG_FILE, "w+");
+    if (config_fp == NULL || tmp_fp == NULL) {
         goto cleanup;
     }
     fd = fileno(config_fp);
@@ -44,10 +45,6 @@ bool change_policy_command(
         goto cleanup;
     }
     if (flock(fd, LOCK_EX) == -1) {
-        goto cleanup;
-    }
-    tmp_fp = fopen(TMP_FIREWALL_CONFIG_FILE, "w+");
-    if (tmp_fp == NULL) {
         goto cleanup;
     }
 
