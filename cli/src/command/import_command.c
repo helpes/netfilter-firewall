@@ -13,8 +13,8 @@ bool import_command(const char *dst_file, const char *src_file)
                     "ルールのインポートを完了できませんでした。";
     FILE *dst_fp = NULL;
     FILE *src_fp = NULL;
+    FILE *tmp_fp = NULL;
     int dst_fd = -1;
-    int src_fd = -1;
     bool ret = false;
 
     // 引数チェック
@@ -34,17 +34,17 @@ bool import_command(const char *dst_file, const char *src_file)
     }
 
     // ファイルのオープンとロック
-    dst_fp = fopen(dst_file, "r+");
+    dst_fp = fopen(dst_file, "r");
     src_fp = fopen(src_file, "r");
-    if (dst_fp == NULL || src_fp == NULL) {
+    tmp_fp = fopen(TMP_RULE_FILE, "w");
+    if (dst_fp == NULL || src_fp == NULL || tmp_fp == NULL) {
         goto cleanup;
     }
     dst_fd = fileno(dst_fp);
-    src_fd = fileno(src_fp);
-    if (dst_fd == -1 || src_fd == -1) {
+    if (dst_fd == -1) {
         goto cleanup;
     }
-    if (flock(dst_fd, LOCK_EX) == -1 || flock(src_fd, LOCK_SH) == -1) {
+    if (flock(dst_fd, LOCK_EX) == -1) {
         goto cleanup;
     }
 
@@ -55,14 +55,18 @@ bool import_command(const char *dst_file, const char *src_file)
         goto cleanup;
     }
 
-    if (copy_file(src_fp, dst_fp) == false) {
+    if (copy_file(src_fp, tmp_fp) == false) {
         goto cleanup;
     }
-
-    // ファイアウォールがファイルを閲覧できるよう、共有ロックに変更
-    if (flock(dst_fd, LOCK_SH) == -1) {
+    fclose(tmp_fp);
+    tmp_fp = NULL;
+    if (rename(TMP_RULE_FILE, dst_file) == -1) {
         goto cleanup;
     }
+    flock(dst_fd, LOCK_UN);
+    fclose(dst_fp);
+    dst_fd = -1;
+    dst_fp = NULL;
 
     // ファイアウォール本体にルールの更新を伝える
     ServerResponse response = send_command_to_server(
@@ -99,14 +103,17 @@ bool import_command(const char *dst_file, const char *src_file)
     if (dst_fd != -1) {
         flock(dst_fd, LOCK_UN);
     }
-    if (src_fd != -1) {
-        flock(src_fd, LOCK_UN);
-    }
     if (dst_fp != NULL) {
         fclose(dst_fp);
     }
     if (src_fp != NULL) {
         fclose(src_fp);
+    }
+    if (tmp_fp != NULL) {
+        fclose(tmp_fp);
+    }
+    if (access(TMP_RULE_FILE, F_OK) == 0) {
+        unlink(TMP_RULE_FILE);
     }
     return ret;
 }
