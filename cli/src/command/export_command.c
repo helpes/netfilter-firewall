@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <string.h>
 #include <errno.h>
 #include <sys/file.h>
 #include "firewall_io.h"
@@ -8,10 +11,10 @@ bool export_command(const char *src_file, const char *dst_file)
 {
     char *err_msg = "エラー：予期せぬエラーが発生したため、"
                     "ルールのエクスポートを完了できませんでした。";
+    char *tmp_file = NULL;
     FILE *src_fp = NULL;
-    FILE *dst_fp = NULL;
+    FILE *tmp_fp = NULL;
     int src_fd = -1;
-    int dst_fd = -1;
     bool ret = false;
 
     // 引数チェック
@@ -29,6 +32,14 @@ bool export_command(const char *src_file, const char *dst_file)
     if (src_fp == NULL) {
         goto cleanup;
     }
+    src_fd = fileno(src_fp);
+    if (src_fd == -1) {
+        goto cleanup;
+    }
+    if (flock(src_fd, LOCK_SH) == -1) {
+        goto cleanup;
+    }
+
     RuleCounts counts;
     if (get_rule_counts_from_file(src_fp, &counts) == false) {
         goto cleanup;
@@ -38,28 +49,26 @@ bool export_command(const char *src_file, const char *dst_file)
                   "エクスポートが完了しませんでした。";
         goto cleanup;
     }
-    dst_fp = fopen(dst_file, "r+");
-    if (dst_fp == NULL) {
-        if (errno == ENOENT) {
-            // ファイルが存在しなければ作成する
-            dst_fp = fopen(dst_file, "w");
-            errno = 0;
-        }
-        if (dst_fp == NULL) {
-            goto cleanup;
-        }
-        printf("%sを作成しました。\n", dst_file);
-    }
-    src_fd = fileno(src_fp);
-    dst_fd = fileno(dst_fp);
-    if (src_fd == -1 || dst_fd == -1) {
+
+    // 一時ファイルの作成
+    const char *suffix = ".tmp";
+    size_t tmp_file_len = strlen(dst_file) + strlen(suffix) + 1;
+    tmp_file = malloc(tmp_file_len);
+    if (tmp_file == NULL) {
         goto cleanup;
     }
-    if (flock(src_fd, LOCK_SH) == -1 || flock(dst_fd, LOCK_EX) == -1) {
+    snprintf(tmp_file, tmp_file_len, "%s%s", dst_file, suffix);
+    tmp_fp = fopen(tmp_file, "w");
+    if (tmp_fp == NULL) {
         goto cleanup;
     }
 
-    if (copy_file(src_fp, dst_fp) == false) {
+    if (copy_file(src_fp, tmp_fp) == false) {
+        goto cleanup;
+    }
+    fclose(tmp_fp);
+    tmp_fp = NULL;
+    if (rename(tmp_file, dst_file) == -1) {
         goto cleanup;
     }
     printf("ルールのエクスポートが完了しました。\n");
@@ -67,20 +76,23 @@ bool export_command(const char *src_file, const char *dst_file)
     ret = true;
 
     cleanup:
+    free(tmp_file);
     if (ret == false) {
         fprintf(stderr, "%s\n", err_msg);
     }
     if (src_fd != -1) {
         flock(src_fd, LOCK_UN);
     }
-    if (dst_fd != -1) {
-        flock(dst_fd, LOCK_UN);
-    }
     if (src_fp != NULL) {
         fclose(src_fp);
     }
-    if (dst_fp != NULL) {
-        fclose(dst_fp);
+    if (tmp_fp != NULL) {
+        fclose(tmp_fp);
+    }
+    if (tmp_file != NULL) {
+        if (access(tmp_file, F_OK) == 0) {
+            unlink(tmp_file);
+        }
     }
     return ret;
 }
