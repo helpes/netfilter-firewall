@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <errno.h>
 #include <sys/file.h>
 #include "firewall_config.h"
+#include "firewall_io.h"
 #include "firewall_validation.h"
 #include "cli_utils.h"
 #include "rule_manager.h"
@@ -18,6 +20,7 @@ bool delete_command(
     char *err_msg = "エラー：予期せぬエラーが発生したため、"
                     "ルールの削除を完了できませんでした。";
     FILE *rule_fp = NULL;
+    FILE *tmp_fp = NULL;
     int fd = -1;
     bool ret = false;
 
@@ -52,9 +55,17 @@ bool delete_command(
     if (flock(fd, LOCK_EX) == -1) {
         goto cleanup;
     }
+    tmp_fp = fopen(TMP_RULE_FILE, "w+");
+    if (tmp_fp == NULL) {
+        goto cleanup;
+    }
+
+    if (copy_file(rule_fp, tmp_fp) == false) {
+        goto cleanup;
+    }
 
     // ルールファイルの正当性を検証
-    FileValidationResult validation_result = is_valid_rule_file(rule_fp);
+    FileValidationResult validation_result = is_valid_rule_file(tmp_fp);
     switch (validation_result) {
         case FILE_VALID:
             break;
@@ -74,7 +85,7 @@ bool delete_command(
     }
 
     RuleDeleteResult delete_result =
-        delete_rule(rule_fp, target_chain, target_line);
+        delete_rule(tmp_fp, target_chain, target_line);
     switch (delete_result) {
         case DELETE_SUCCESS:
             break;
@@ -90,10 +101,15 @@ bool delete_command(
             break; // NOT REACHED
     }
 
-    // ファイアウォールがファイルを閲覧できるよう、共有ロックに変更
-    if (flock(fd, LOCK_SH) == -1) {
+    fclose(tmp_fp);
+    tmp_fp = NULL;
+    if (rename(TMP_RULE_FILE, filepath) == -1) {
         goto cleanup;
     }
+    flock(fd, LOCK_UN);
+    fclose(rule_fp);
+    fd = -1;
+    rule_fp = NULL;
 
     // ファイアウォール本体にルールの更新を伝える
     ServerResponse response = send_command_to_server(
@@ -132,6 +148,12 @@ bool delete_command(
     }
     if (rule_fp != NULL) {
         fclose(rule_fp);
+    }
+    if (tmp_fp != NULL) {
+        fclose(tmp_fp);
+    }
+    if (access(TMP_RULE_FILE, F_OK) == 0) {
+        unlink(TMP_RULE_FILE);
     }
     return ret;
 }
