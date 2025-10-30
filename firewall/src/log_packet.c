@@ -6,9 +6,11 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 #include <sys/file.h>
 #include "firewall_config.h"
 #include "firewall_parser.h"
+#include "log_rotation.h"
 
 static bool format_icmp_log(
     const unsigned char *packet,
@@ -36,7 +38,7 @@ static bool format_other_log(
 );
 
 void log_packet(
-    FILE *log_fp,
+    FILE **log_fp,
     const unsigned char *packet,
     FirewallRule *match_rule,
     ActionType policy
@@ -80,19 +82,23 @@ void log_packet(
             break;
     }
 
+    if (log_rotation(log_fp, LOGFILE_ROTATE, LOG_ROTATION_SIZE_MB) == false) {
+        goto cleanup;
+    }
+
     // ファイルに書き込む
-    fd = fileno(log_fp);
+    fd = fileno(*log_fp);
     if (fd == -1) {
         goto cleanup;
     }
     if (flock(fd, LOCK_EX) == -1) {
         goto cleanup;
     }
-    ssize_t n = fwrite(log, sizeof(char), strlen(log), log_fp);
+    ssize_t n = fwrite(log, sizeof(char), strlen(log), *log_fp);
     if (n == -1) {
         goto cleanup;
     }
-    fflush(log_fp);
+    fflush(*log_fp);
 
     cleanup:
     if (fd != -1) {

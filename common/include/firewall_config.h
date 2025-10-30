@@ -13,6 +13,9 @@
 #define TMP_RULE_FILE "config/rules.tmp"
 #define LOG_FILE "log/packet.log"
 #define DOMAIN_SOCKET_PATH "/tmp/firewall.sock"
+#define LOG_FILE_MAX_LEN 256
+#define LOG_ROTATION_SIZE_MB 10
+#define LOGFILE_ROTATE 3
 #define CHAIN_MAX_LEN 8
 #define PROTOCOL_MAX_LEN 8
 #define IP_ADDR_MAX_LEN INET_ADDRSTRLEN

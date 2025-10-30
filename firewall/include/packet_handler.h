@@ -6,7 +6,7 @@
 #include "firewall_config.h"
 
 typedef struct {
-    FILE *log_fp;
+    FILE **log_fp;
     FirewallRule **fw_rules;
     size_t *fw_rule_count;
     ActionType *policy;

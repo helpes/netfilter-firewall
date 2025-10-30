@@ -16,7 +16,7 @@ int handle_packet(
 )
 {
     PacketHandlerArgs *args = (PacketHandlerArgs *)data;
-    FILE *log_fp = args->log_fp;
+    FILE **log_fp = args->log_fp;
     FirewallRule *rules = NULL;
     size_t rule_count = 0;
     ActionType policy = DEFAULT_POLICY;

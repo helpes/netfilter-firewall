@@ -5,7 +5,7 @@
 #include "firewall_config.h"
 
 void log_packet(
-    FILE *log_fp,
+    FILE **log_fp,
     const unsigned char *packet,
     FirewallRule *match_rule,
     ActionType policy

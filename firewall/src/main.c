@@ -58,13 +58,13 @@ int main(void)
         goto cleanup;
     }
     PacketHandlerArgs input_args = {
-        log_fp,
+        &log_fp,
         &fw_input_rules,
         &fw_rule_counts.input_count,
         &config.input_policy
     };
     PacketHandlerArgs output_args = {
-        log_fp,
+        &log_fp,
         &fw_output_rules,
         &fw_rule_counts.output_count,
         &config.output_policy
