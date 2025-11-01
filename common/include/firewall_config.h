@@ -28,6 +28,13 @@
 #define CONFIG_MAX_LEN 128
 
 typedef enum {
+    CONFIG_INPUT_POLICY,
+    CONFIG_OUTPUT_POLICY,
+    CONFIG_DEFAULT_LOGGING,
+    CONFIG_UNKNOWN
+} ConfigType;
+
+typedef enum {
     CHAIN_UNSPECIFIED,
     CHAIN_INPUT,
     CHAIN_OUTPUT
@@ -86,12 +93,8 @@ typedef struct {
 typedef struct {
     ActionType input_policy;
     ActionType output_policy;
+    LogStatus default_logging;
 } FirewallConfig;
-
-typedef struct {
-    const char *key;
-    const char **values;
-} ConfigItems;
 
 // ルールの未設定の値
 #define IP_ADDR_UNSPECIFIED ""
@@ -100,14 +103,12 @@ typedef struct {
 
 // ルールのデフォルト値
 extern const ActionType DEFAULT_POLICY;
+extern const LogStatus DEFAULT_LOGGING; // ルールに一致しなかったパケットのログ設定
 extern const ProtocolType DEFAULT_PROTOCOL;
 extern const char *DEFAULT_IP_ADDR;
 extern const int DEFAULT_PORT;
 extern const ActionType DEFAULT_ACTION;
-extern const LogStatus DEFAULT_LOG_STATUS;
+extern const LogStatus DEFAULT_LOG_STATUS; // ルールに設定するデフォルトのログ
 extern const RuleState DEFAULT_RULE_STATE;
-
-// 設定ファイルの項目値
-extern const ConfigItems config_items[];
 
 #endif

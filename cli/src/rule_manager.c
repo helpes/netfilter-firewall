@@ -14,7 +14,7 @@ static RuleUpdateResult merge_rule(
     FirewallRule *src_rule,
     FirewallRule *dst_rule
 );
-static void print_header(ChainType chain, ActionType policy);
+static void print_header(ChainType chain, ActionType policy, LogStatus logging);
 static bool print_rules(const FirewallRule *rules, size_t rule_len);
 static void format_address_port(
     char *buf,
@@ -308,12 +308,13 @@ bool show_rules(FILE *rule_fp, FILE *config_fp)
     }
 
     RuleCounts counts;
-    if (load_rules_by_chain(rule_fp, &input_rules, &output_rules, &counts) == false) {
+    if (load_rules_by_chain(rule_fp, &input_rules, &output_rules,
+                            &counts) == false) {
         goto cleanup;
     }
 
     // INPUTチェインのルール表示
-    print_header(CHAIN_INPUT, config.input_policy);
+    print_header(CHAIN_INPUT, config.input_policy, config.default_logging);
     if (counts.input_count != 0) {
         if (print_rules(input_rules, counts.input_count) == false) {
             goto cleanup;
@@ -322,7 +323,7 @@ bool show_rules(FILE *rule_fp, FILE *config_fp)
     printf("\n");
 
     // OUTPUTチェインのルール表示
-    print_header(CHAIN_OUTPUT, config.output_policy);
+    print_header(CHAIN_OUTPUT, config.output_policy, config.default_logging);
     if (counts.output_count != 0) {
         if (print_rules(output_rules, counts.output_count) == false) {
             goto cleanup;
@@ -344,12 +345,13 @@ bool show_rules(FILE *rule_fp, FILE *config_fp)
     return ret;
 }
 
-static void print_header(ChainType chain, ActionType policy)
+static void print_header(ChainType chain, ActionType policy, LogStatus logging)
 {
     char *chain_str = (chain == CHAIN_INPUT) ? "INPUT" : "OUTPUT";
     char *policy_str = (policy == ACTION_ACCEPT) ? "ACCEPT" : "DROP";
+    char *logging_str = (logging == LOG_ENABLED) ? "ON" : "OFF";
 
-    printf("%s (ポリシー %s)\n", chain_str, policy_str);
+    printf("%s (ポリシー：%s, デフォルトログ：%s)\n", chain_str, policy_str, logging_str);
     printf("%-6s  %-15s  %-28s  %-27s  %-15s  %-7s  %-10s\n",
            "番号", "プロトコル", "送信元アドレス", "宛先アドレス",
            "アクション", "ログ", "有効");

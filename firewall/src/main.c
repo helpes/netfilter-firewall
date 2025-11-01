@@ -61,13 +61,15 @@ int main(void)
         &log_fp,
         &fw_input_rules,
         &fw_rule_counts.input_count,
-        &config.input_policy
+        &config.input_policy,
+        &config.default_logging
     };
     PacketHandlerArgs output_args = {
         &log_fp,
         &fw_output_rules,
         &fw_rule_counts.output_count,
-        &config.output_policy
+        &config.output_policy,
+        &config.default_logging
     };
     // INPUTチェインのパケットを受信するハンドルの作成
     for (int i = MIN_INPUT_QUEUE_NUMBER; i <= MAX_INPUT_QUEUE_NUMBER; i++) {

@@ -65,6 +65,31 @@ bool get_packet_ports(const unsigned char *packet, int *src_port, int *dst_port)
     return true;
 }
 
+bool config_to_string(ConfigType config, char *str_out, size_t str_len)
+{
+    if (str_out == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+
+    if (config == CONFIG_INPUT_POLICY) {
+        snprintf(str_out, str_len, "INPUT_POLICY");
+        return true;
+    }
+
+    if (config == CONFIG_OUTPUT_POLICY) {
+        snprintf(str_out, str_len, "OUTPUT_POLICY");
+        return true;
+    }
+
+    if (config == CONFIG_DEFAULT_LOGGING) {
+        snprintf(str_out, str_len, "DEFAULT_LOGGING");
+        return true;
+    }
+
+    return false;
+}
+
 bool rule_chain_to_string(ChainType chain, char *str_out, size_t str_len)
 {
     if (str_out == NULL) {
@@ -184,6 +209,28 @@ bool rule_state_to_string(RuleState state, char *str_out, size_t str_len)
     }
 
     return false;
+}
+
+ConfigType parse_config_string(const char *config_string)
+{
+    if (config_string == NULL) {
+        errno = EINVAL;
+        return CONFIG_UNKNOWN;
+    }
+
+    if (strcmp(config_string, "INPUT_POLICY") == 0) {
+        return CONFIG_INPUT_POLICY;
+    }
+
+    if (strcmp(config_string, "OUTPUT_POLICY") == 0) {
+        return CONFIG_OUTPUT_POLICY;
+    }
+
+    if (strcmp(config_string, "DEFAULT_LOGGING") == 0) {
+        return CONFIG_DEFAULT_LOGGING;
+    }
+
+    return CONFIG_UNKNOWN;
 }
 
 ChainType parse_chain_string(const char *chain_str)

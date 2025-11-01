@@ -19,18 +19,15 @@ int handle_packet(
     FILE **log_fp = args->log_fp;
     FirewallRule *rules = NULL;
     size_t rule_count = 0;
-    ActionType policy = DEFAULT_POLICY;
+    ActionType policy = *(args->policy);
+    LogStatus log_flag = *(args->default_logging);
     FirewallRule *match_rule = NULL;
-    LogStatus log_flag = LOG_DISABLED; // ToDo: 初期値をファイルから参照するように変更
 
     if (args->fw_rules != NULL) {
         rules = *(args->fw_rules);
     }
     if (args->fw_rule_count != NULL) {
         rule_count = *(args->fw_rule_count);
-    }
-    if (args->policy != NULL) {
-        policy = *(args->policy);
     }
 
     // パケットの本体と情報を取得

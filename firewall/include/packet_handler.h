@@ -10,6 +10,7 @@ typedef struct {
     FirewallRule **fw_rules;
     size_t *fw_rule_count;
     ActionType *policy;
+    LogStatus *default_logging;
 } PacketHandlerArgs;
 
 int handle_packet(
