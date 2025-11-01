@@ -190,27 +190,32 @@ FileValidationResult is_valid_config_file(FILE *fp)
             goto cleanup;
         }
 
-        int key_index = -1;
-        for (int i = 0; config_items[i].key != NULL; i++) {
-            if (strcmp(key, config_items[i].key) == 0) {
-                key_index = i;
+        ConfigType config_type = parse_config_string(key);
+        switch (config_type) {
+            case CONFIG_INPUT_POLICY:
+                ActionType input_policy = parse_action_string(value);
+                if (input_policy == ACTION_UNSPECIFIED) {
+                    goto cleanup;
+                }
                 break;
-            }
-        }
-        if (key_index == -1) {
-            goto cleanup;
-        }
-
-        int value_index = -1;
-        const char **target_values = config_items[key_index].values;
-        for (int i = 0; target_values[i] != NULL; i++) {
-            if (strcmp(value, target_values[i]) == 0) {
-                value_index = i;
+            case CONFIG_OUTPUT_POLICY:
+                ActionType output_policy = parse_action_string(value);
+                if (output_policy == ACTION_UNSPECIFIED) {
+                    goto cleanup;
+                }
                 break;
-            }
-        }
-        if (value_index == -1) {
-            goto cleanup;
+            case CONFIG_DEFAULT_LOGGING:
+                LogStatus default_logging = parse_log_string(value);
+                if (default_logging == LOG_UNSPECIFIED) {
+                    goto cleanup;
+                }
+                break;
+            case CONFIG_UNKNOWN:
+                goto cleanup;
+                break; // NOT REACHED
+            default:
+                goto cleanup;
+                break; // NOT REACHED
         }
 
         exists = true;

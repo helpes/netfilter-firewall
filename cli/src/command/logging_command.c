@@ -9,14 +9,10 @@
 #include "firewall_parser.h"
 #include "domain_socket_utils.h"
 
-bool change_policy_command(
-    const char *filepath,
-    ChainType target_chain,
-    ActionType policy_to_change
-)
+bool logging_command(const char *filepath, LogStatus logging)
 {
     char *err_msg = "エラー：予期せぬエラーが発生したため、"
-                    "ポリシーを変更できませんでした。";
+                    "ログの設定ができませんでした。";
     FILE *config_fp = NULL;
     FILE *tmp_fp = NULL;
     int fd = -1;
@@ -27,12 +23,8 @@ bool change_policy_command(
         errno = EINVAL;
         goto cleanup;
     }
-    if (target_chain == CHAIN_UNSPECIFIED) {
-        err_msg = "エラー：-c オプションでチェインを指定してください。";
-        goto cleanup;
-    }
-    if (policy_to_change == ACTION_UNSPECIFIED) {
-        err_msg = "エラー：-a オプションで変更するポリシーの値を指定してください。";
+    if (logging == LOG_UNSPECIFIED) {
+        err_msg = "エラー：-l オプションでログの設定を指定してください。";
         goto cleanup;
     }
 
@@ -61,28 +53,25 @@ bool change_policy_command(
         goto cleanup;
     }
 
-    // ポリシーの変更
+    // ログ設定の変更
     char target_key[CONFIG_MAX_LEN];
     char target_value[CONFIG_MAX_LEN];
-    ConfigType config_type = (target_chain == CHAIN_INPUT)
-        ? CONFIG_INPUT_POLICY
-        : CONFIG_OUTPUT_POLICY;
-    if (config_to_string(config_type, target_key,
+    if (config_to_string(CONFIG_DEFAULT_LOGGING, target_key,
                          sizeof(target_key)) == false) {
         goto cleanup;
     }
-    if (rule_action_to_string(policy_to_change, target_value,
-                              sizeof(target_value)) == false) {
+    if (rule_log_to_string(logging, target_value,
+                           sizeof(target_value)) == false) {
         goto cleanup;
     }
 
-    ConfigChangeResult change_result = 
+    ConfigChangeResult change_result =
         change_config(tmp_fp, target_key, target_value);
     switch (change_result) {
         case CONFIG_CHANGE_SUCCESS:
             break;
         case CONFIG_CHANGE_ERR_NO_CHANGE:
-            err_msg = "エラー：元のポリシーから変更されていません。";
+            err_msg = "エラー：元のログ設定から変更されていません。";
             goto cleanup;
             break; // NOT REACHED
         case CONFIG_CHANGE_ERR_INTERNAL:
@@ -110,7 +99,7 @@ bool change_policy_command(
     );
     switch (response) {
         case RES_SUCCESS:
-            printf("ポリシーが更新されました。\n");
+            printf("ログ設定が更新されました。\n");
             break;
         case RES_FAILURE:
             err_msg = "エラー：ファイアウォールが設定の再読み込みに失敗しました。";

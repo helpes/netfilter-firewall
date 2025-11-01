@@ -12,10 +12,10 @@ typedef enum {
 } RuleExistsResult;
 
 typedef enum {
-    POLICY_CHANGE_SUCCESS,       // ポリシーの変更に成功
-    POLICY_CHANGE_ERR_NO_CHANGE, // 元のポリシーから変更されていない
-    POLICY_CHANGE_ERR_INTERNAL   // 内部エラーが発生
-} PolicyChangeResult;
+    CONFIG_CHANGE_SUCCESS,       // 設定の変更に成功
+    CONFIG_CHANGE_ERR_NO_CHANGE, // 元の設定から変更されていない
+    CONFIG_CHANGE_ERR_INTERNAL   // 内部エラーが発生
+} ConfigChangeResult;
 
 typedef struct {
     int file_line;
@@ -52,10 +52,10 @@ RuleExistsResult rule_exists_in_file(
     const FirewallRule *target_rule,
     MatchLines *match_lines_out
 );
-PolicyChangeResult change_policy(
+ConfigChangeResult change_config(
     FILE *fp,
-    ChainType target_chain,
-    ActionType policy_to_change
+    const char *target_key,
+    const char *target_value
 );
 bool get_rule_counts_from_file(FILE *fp, RuleCounts *counts_out);
 bool copy_file(FILE *src_fp, FILE *dst_fp);

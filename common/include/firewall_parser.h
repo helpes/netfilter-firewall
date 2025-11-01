@@ -7,12 +7,14 @@
 
 ProtocolType get_protocol_from_number(uint8_t proto_num);
 bool get_packet_ports(const unsigned char *packet, int *src_port, int *dst_port);
+bool config_to_string(ConfigType config, char *str_out, size_t str_len);
 bool rule_chain_to_string(ChainType chain, char *str_out, size_t str_len);
 bool rule_protocol_to_string(ProtocolType proto, char *str_out, size_t str_len);
 bool rule_port_to_string(int port, char *str_out, size_t str_len);
 bool rule_action_to_string(ActionType action, char *str_out, size_t str_len);
 bool rule_log_to_string(LogStatus log, char *str_out, size_t str_len);
 bool rule_state_to_string(RuleState state, char *str_out, size_t str_len);
+ConfigType parse_config_string(const char *config_string);
 ChainType parse_chain_string(const char *chain_str);
 ProtocolType parse_protocol_string(const char *proto_str);
 ActionType parse_action_string(const char *action_str);

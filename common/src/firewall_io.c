@@ -23,6 +23,7 @@ bool load_config_from_file(FILE *fp, FirewallConfig *config_out)
     FirewallConfig config;
     config.input_policy = DEFAULT_POLICY;
     config.output_policy = DEFAULT_POLICY;
+    config.default_logging = DEFAULT_LOGGING;
 
     char line[CONFIG_MAX_LEN];
     while (fgets(line, sizeof(line), fp) != NULL) {
@@ -40,33 +41,36 @@ bool load_config_from_file(FILE *fp, FirewallConfig *config_out)
             goto cleanup;
         }
 
-        if (strcmp(key, config_items[0].key) == 0) {
-            const char **policy_values = config_items[0].values;
-
-            if (strcmp(value, policy_values[0]) == 0) {
-                config.input_policy = ACTION_ACCEPT;
-                continue;
-            } else if (strcmp(value, policy_values[1]) == 0) {
-                config.input_policy = ACTION_DROP;
-                continue;
-            }
-            goto cleanup;
+        ConfigType config_type = parse_config_string(key);
+        switch (config_type) {
+            case CONFIG_INPUT_POLICY:
+                ActionType input_policy = parse_action_string(value);
+                if (input_policy == ACTION_UNSPECIFIED) {
+                    goto cleanup;
+                }
+                config.input_policy = input_policy;
+                break;
+            case CONFIG_OUTPUT_POLICY:
+                ActionType output_policy = parse_action_string(value);
+                if (output_policy == ACTION_UNSPECIFIED) {
+                    goto cleanup;
+                }
+                config.output_policy = output_policy;
+                break;
+            case CONFIG_DEFAULT_LOGGING:
+                LogStatus default_logging = parse_log_string(value);
+                if (default_logging == LOG_UNSPECIFIED) {
+                    goto cleanup;
+                }
+                config.default_logging = default_logging;
+                break;
+            case CONFIG_UNKNOWN:
+                goto cleanup;
+                break; // NOT REACHED
+            default:
+                goto cleanup;
+                break; // NOT REACHED
         }
-
-        if (strcmp(key, config_items[1].key) == 0) {
-            const char **policy_values = config_items[1].values;
-
-            if (strcmp(value, policy_values[0]) == 0) {
-                config.output_policy = ACTION_ACCEPT;
-                continue;
-            } else if (strcmp(value, policy_values[1]) == 0) {
-                config.output_policy = ACTION_DROP;
-                continue;
-            }
-            goto cleanup;
-        }
-
-        goto cleanup;
     }
 
     ret = true;
@@ -562,31 +566,19 @@ RuleExistsResult rule_exists_in_file(
     return ret;
 }
 
-PolicyChangeResult change_policy(
+ConfigChangeResult change_config(
     FILE *fp,
-    ChainType target_chain,
-    ActionType policy_to_change
+    const char *target_key,
+    const char *target_value
 )
 {
     char *buf = NULL;
-    PolicyChangeResult ret = POLICY_CHANGE_ERR_INTERNAL;
+    ConfigChangeResult ret = CONFIG_CHANGE_ERR_INTERNAL;
 
-    if (fp == NULL) {
+    if (fp == NULL || target_key == NULL || target_value == NULL) {
         errno = EINVAL;
         goto cleanup;
     }
-    if (target_chain == CHAIN_UNSPECIFIED ||
-        policy_to_change == ACTION_UNSPECIFIED) {
-        errno = EINVAL;
-        goto cleanup;
-    }
-
-    char *chain_str = (target_chain == CHAIN_INPUT)
-        ? "INPUT_POLICY"
-        : "OUTPUT_POLICY";
-    char *policy_str = (policy_to_change == ACTION_ACCEPT)
-        ? "ACCEPT"
-        : "DROP";
 
     // ファイルサイズと最大設定文字列に基づいてバッファを確保
     int fd = fileno(fp);
@@ -613,6 +605,11 @@ PolicyChangeResult change_policy(
         char copy[CONFIG_MAX_LEN];
         snprintf(copy, sizeof(copy), "%s", line);
 
+        // 空行やコメント行はスキップ
+        if (copy[0] == '\0' || copy[0] == '#') {
+            continue;
+        }
+
         char *saveptr = NULL;
         char *key = strtok_r(copy, "=", &saveptr);
         char *value = strtok_r(NULL, "=", &saveptr);
@@ -620,12 +617,12 @@ PolicyChangeResult change_policy(
             goto cleanup;
         }
 
-        if (strcmp(key, chain_str) == 0) {
-            if (strcmp(value, policy_str) == 0) {
-                ret = POLICY_CHANGE_ERR_NO_CHANGE;
+        if (strcmp(key, target_key) == 0) {
+            if (strcmp(value, target_value) == 0) {
+                ret = CONFIG_CHANGE_ERR_NO_CHANGE;
                 goto cleanup;
             }
-            snprintf(line, sizeof(line), "%s=%s", chain_str, policy_str);
+            snprintf(line, sizeof(line), "%s=%s", target_key, target_value);
             exists = true;
         }
 
@@ -636,10 +633,10 @@ PolicyChangeResult change_policy(
         offset += n;
     }
 
-    // ポリシーに関する設定が存在しなければ、新しく追加する
+    // 設定が存在しなければ、新しく追加する
     if (exists == false) {
         int n = snprintf(buf + offset, buf_size - offset, "%s=%s\n",
-                         chain_str, policy_str);
+                         target_key, target_value);
         if (n >= buf_size - offset) {
             goto cleanup;
         }
@@ -654,7 +651,7 @@ PolicyChangeResult change_policy(
         goto cleanup;
     }
 
-    ret = POLICY_CHANGE_SUCCESS;
+    ret = CONFIG_CHANGE_SUCCESS;
 
     cleanup:
     free(buf);
