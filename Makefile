@@ -11,6 +11,7 @@ CLI_OBJ_DIR      := $(BUILD_DIR)/cli
 COMMON_SRC_DIR   := common/src
 FIREWALL_SRC_DIR := firewall/src
 CLI_SRC_DIR      := cli/src
+RUNDIR           := /var/run/netfilter_firewall
 
 # ソースファイル
 COMMON_SRCS   := $(shell find $(COMMON_SRC_DIR) -name "*.c")
@@ -32,6 +33,7 @@ all: $(FIREWALL_EXEC) $(CLI_EXEC)
 
 # 実行ファイルの生成
 $(FIREWALL_EXEC): $(FIREWALL_OBJS) $(COMMON_OBJS)
+	mkdir -p $(RUNDIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(CLI_EXEC): $(CLI_OBJS) $(COMMON_OBJS)
@@ -51,4 +53,4 @@ $(FIREWALL_OBJ_DIR)/%.o: $(FIREWALL_SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(RUNDIR)

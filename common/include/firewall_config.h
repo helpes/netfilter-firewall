@@ -12,7 +12,7 @@
 #define RULE_FILE "config/rules.csv"
 #define TMP_RULE_FILE "config/rules.tmp"
 #define LOG_FILE "log/packet.log"
-#define DOMAIN_SOCKET_PATH "/tmp/firewall.sock"
+#define DOMAIN_SOCKET_PATH "/var/run/netfilter_firewall/firewall.sock"
 #define LOG_FILE_MAX_LEN 256
 #define LOG_ROTATION_SIZE_MB 10
 #define LOGFILE_ROTATE 3
