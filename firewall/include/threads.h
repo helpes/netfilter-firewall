@@ -5,6 +5,9 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include "firewall_config.h"
 
+#define NFQ_HANDLER_TIMEOUT_SEC 1
+#define CMD_LISTENER_TIMEOUT_SEC 1
+
 typedef struct {
     pthread_rwlock_t *rw_lock;
     struct nfq_handle *h;
