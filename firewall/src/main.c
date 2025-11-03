@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include "nfq_config.h"
@@ -16,6 +17,12 @@
 #include "domain_socket_utils.h"
 #include "threads.h"
 
+volatile sig_atomic_t termination_flag = 0;
+
+static void signal_handler(int sig) {
+    termination_flag = 1;
+}
+
 int main(void)
 {
     struct nfq_handle *h = NULL; // NFQUEUEと接続するハンドル
@@ -27,6 +34,16 @@ int main(void)
     pthread_rwlock_t *rwlock = NULL; // スレッドロック
     FILE *log_fp = NULL;
     int ret = 1;
+
+    // シグナルハンドラの設定
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = signal_handler;
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, NULL) == -1 ||
+        sigaction(SIGTERM, &sa, NULL) == -1) {
+        goto cleanup;
+    }
 
     // 必要なファイルなどを作成
     if (init_env() == false) {

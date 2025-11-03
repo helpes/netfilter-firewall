@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#define TIMEOUT_SEC 5
+#define SERVER_TIMEOUT_SEC 5
 
 typedef enum {
     CMD_RELOAD_RULES,  // ルールを再読み込みするコマンド

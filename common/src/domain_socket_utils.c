@@ -67,7 +67,7 @@ ServerResponse send_command_to_server(
     }
 
     struct timeval timeout;
-    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_sec = SERVER_TIMEOUT_SEC;
     timeout.tv_usec = 0;
     if (setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &timeout,
                    sizeof(timeout)) == -1) {
