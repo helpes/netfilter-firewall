@@ -104,7 +104,8 @@ void *command_listener_thread(void *arg)
                     }
                     break;
                 case CMD_SHUTDOWN:
-                    // ToDo: シャットダウン処理
+                    termination_flag = 1;
+                    res = RES_SUCCESS;
                     break;
                 default:
                     break;
