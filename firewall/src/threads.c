@@ -17,7 +17,6 @@ extern sig_atomic_t termination_flag;
 void *nfq_handler_thread(void *arg)
 {
     NfqHandlerArgs *args = (NfqHandlerArgs *)arg;
-    pthread_rwlock_t *rw_lock = args->rw_lock;
     struct nfq_handle *h = args->h;
     int fd = nfq_fd(args->h);
     char buf[PACKET_BUFFER_SIZE] __attribute__ ((aligned));
@@ -31,9 +30,7 @@ void *nfq_handler_thread(void *arg)
     while (termination_flag == 0) {
         ssize_t len = recv(fd, buf, sizeof(buf), 0);
         if (len >= 0) {
-            pthread_rwlock_rdlock(rw_lock);
             nfq_handle_packet(h, buf, len);
-            pthread_rwlock_unlock(rw_lock);
         }
     }
 
@@ -43,7 +40,7 @@ void *nfq_handler_thread(void *arg)
 void *command_listener_thread(void *arg)
 {
     CmdListenerArgs *args = (CmdListenerArgs *)arg;
-    pthread_rwlock_t *rw_lock = args->rw_lock;
+    pthread_rwlock_t *rwlock = args->rwlock;
     int domain_sock = args->domain_sock;
     char *config_file = args->config_file;
     char *rule_file = args->rule_file;
@@ -84,21 +81,21 @@ void *command_listener_thread(void *arg)
             bool success = false;
             switch (cmd) {
                 case CMD_RELOAD_RULES:
-                    pthread_rwlock_wrlock(rw_lock);
+                    pthread_rwlock_wrlock(rwlock);
                     success = reload_rules(
                         rule_file, input_rules, output_rules, rule_counts
                     );
-                    pthread_rwlock_unlock(rw_lock);
+                    pthread_rwlock_unlock(rwlock);
                     if (success == true) {
                         res = RES_SUCCESS;
                     }
                     break;
                 case CMD_RELOAD_CONFIG:
-                    pthread_rwlock_wrlock(rw_lock);
+                    pthread_rwlock_wrlock(rwlock);
                     success = reload_config(
                         config_file, config
                     );
-                    pthread_rwlock_unlock(rw_lock);
+                    pthread_rwlock_unlock(rwlock);
                     if (success == true) {
                         res = RES_SUCCESS;
                     }

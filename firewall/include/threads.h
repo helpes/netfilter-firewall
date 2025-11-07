@@ -9,12 +9,11 @@
 #define CMD_LISTENER_TIMEOUT_SEC 1
 
 typedef struct {
-    pthread_rwlock_t *rw_lock;
     struct nfq_handle *h;
 } NfqHandlerArgs;
 
 typedef struct {
-    pthread_rwlock_t *rw_lock;
+    pthread_rwlock_t *rwlock;
     int domain_sock;
     char *config_file;
     char *rule_file;
