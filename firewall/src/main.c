@@ -13,6 +13,7 @@
 #include "firewall_io.h"
 #include "nfq_config.h"
 #include "nfq_utils.h"
+#include "stateful_inspection.h"
 #include "packet_handler.h"
 #include "domain_socket_utils.h"
 #include "threads.h"
@@ -29,6 +30,7 @@ int main(void)
     struct nfq_q_handle *q_handles[Q_HANDLE_LEN] = {0}; // パケットを受信するハンドルの配列
     int nfq_sock = -1;
     int domain_sock = -1;
+    StateTableEntry *head = NULL;
     FirewallRule *fw_input_rules = NULL;
     FirewallRule *fw_output_rules = NULL;
     pthread_rwlock_t *rwlock = NULL; // スレッドロック
@@ -69,29 +71,42 @@ int main(void)
         goto cleanup;
     }
 
+    // スレッドロックの設定
+    rwlock = malloc(sizeof(pthread_rwlock_t));
+    if (rwlock == NULL) {
+        goto cleanup;
+    }
+    if (pthread_rwlock_init(rwlock, NULL) != 0) {
+        goto cleanup;
+    }
+
     // NFQUEUEソケットの作成
     nfq_sock = create_nfq_socket(&h);
     if (nfq_sock == -1) {
         goto cleanup;
     }
     PacketHandlerArgs input_args = {
-        &log_fp,
+        rwlock,
+        &head,
         &fw_input_rules,
         &fw_rule_counts.input_count,
         &config.input_policy,
-        &config.default_logging
+        &config.default_logging,
+        &log_fp,
     };
     PacketHandlerArgs output_args = {
-        &log_fp,
+        rwlock,
+        &head,
         &fw_output_rules,
         &fw_rule_counts.output_count,
         &config.output_policy,
-        &config.default_logging
+        &config.default_logging,
+        &log_fp,
     };
     // INPUTチェインのパケットを受信するハンドルの作成
     for (int i = MIN_INPUT_QUEUE_NUMBER; i <= MAX_INPUT_QUEUE_NUMBER; i++) {
         q_handles[i] = create_nfq_queue_handle(
-            h, i, &handle_packet, &input_args
+            h, i, &handle_input_packet, &input_args
         );
         if (q_handles[i] == NULL) {
             goto cleanup;
@@ -100,7 +115,7 @@ int main(void)
     // OUTPUTチェインのパケットを受信するハンドルの作成
     for (int i = MIN_OUTPUT_QUEUE_NUMBER; i <= MAX_OUTPUT_QUEUE_NUMBER; i++) {
         q_handles[i] = create_nfq_queue_handle(
-            h, i, &handle_packet, &output_args
+            h, i, &handle_output_packet, &output_args
         );
         if (q_handles[i] == NULL) {
             goto cleanup;
@@ -114,15 +129,7 @@ int main(void)
     }
 
     // スレッドに渡す引数を設定
-    rwlock = malloc(sizeof(pthread_rwlock_t));
-    if (rwlock == NULL) {
-        goto cleanup;
-    }
-    if (pthread_rwlock_init(rwlock, NULL) != 0) {
-        goto cleanup;
-    }
     NfqHandlerArgs nfq_handler_args = {
-        rwlock,
         h
     };
     CmdListenerArgs cmd_listener_args = {
@@ -176,6 +183,7 @@ int main(void)
     }
     free(fw_input_rules);
     free(fw_output_rules);
+    destroy_state_table(&head);
     free(rwlock);
     return ret;
 }
