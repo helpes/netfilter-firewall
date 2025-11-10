@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <pthread.h>
 #include <errno.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
@@ -36,6 +35,7 @@ bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
     entry->dst_ip = ip_hdr->daddr;
     entry->last_activity = time(NULL);
     entry->next = NULL;
+    entry->prev = NULL;
 
     switch (entry->protocol) {
         case IPPROTO_ICMP:
@@ -80,11 +80,7 @@ bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
     return ret;
 }
 
-bool insert_state_entry(
-    StateTableEntry **head,
-    const unsigned char *packet,
-    pthread_rwlock_t *rwlock
-)
+bool insert_state_entry(StateTableEntry **head, const unsigned char *packet)
 {
     if (head == NULL || packet == NULL) {
         errno = EINVAL;
@@ -93,7 +89,7 @@ bool insert_state_entry(
 
     if (*head != NULL) {
         // 同じエントリーがあれば、最終アクティブ時間を更新して終了
-        StateTableEntry *existing_entry = lookup_state_table(*head, packet, rwlock);
+        StateTableEntry *existing_entry = lookup_state_table(*head, packet);
         if (existing_entry != NULL) {
             existing_entry->last_activity = time(NULL);
             return true;
@@ -105,35 +101,69 @@ bool insert_state_entry(
         return false;
     }
 
-    pthread_rwlock_wrlock(rwlock);
+    if (*head != NULL) {
+        (*head)->prev = new_entry;
+    }
     new_entry->next = *head;
     *head = new_entry;
-    pthread_rwlock_unlock(rwlock);
 
     return true;
 }
 
-void destroy_state_table(StateTableEntry **head)
+void delete_entry(StateTableEntry **head, StateTableEntry *entry_to_delete)
 {
-    if (head == NULL || *head == NULL) {
+    if (entry_to_delete == NULL) {
+        errno = EINVAL;
         return;
     }
 
-    StateTableEntry *current_entry = *head;
-    while (current_entry != NULL) {
-        StateTableEntry *tmp_entry = current_entry->next;
-        free(current_entry->proto_info);
-        free(current_entry);
-        current_entry = tmp_entry;
+    if (entry_to_delete->prev == NULL) { // 削除対象が先頭の場合
+        *head = entry_to_delete->next;
+        if (*head != NULL) {
+            (*head)->prev = NULL;
+        }
+    } else if (entry_to_delete->next == NULL) { // 削除対象が末尾の場合
+        entry_to_delete->prev->next = NULL;
+    } else {
+        entry_to_delete->prev->next = entry_to_delete->next;
+        entry_to_delete->next->prev = entry_to_delete->prev;
     }
-    *head = NULL;
+
+    free(entry_to_delete->proto_info);
+    free(entry_to_delete);
 }
 
-StateTableEntry *lookup_state_table(
-    StateTableEntry *head,
-    const unsigned char *packet,
-    pthread_rwlock_t *rwlock
-)
+bool check_entry_timeout(StateTableEntry *entry_to_check)
+{
+    if (entry_to_check == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+
+    int timeout_sec;
+    switch (entry_to_check->protocol) {
+        case IPPROTO_ICMP:
+            timeout_sec = ICMP_CONNECTION_TIMEOUT_SEC;
+            break;
+        case IPPROTO_TCP:
+            timeout_sec = TCP_CONNECTION_TIMEOUT_SEC;
+            break;
+        case IPPROTO_UDP:
+            timeout_sec = UDP_CONNECTION_TIMEOUT_SEC;
+            break;
+        default:
+            return false;
+            break; // NOT REACHED
+    }
+
+    if (time(NULL) - entry_to_check->last_activity > timeout_sec) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+StateTableEntry *lookup_state_table(StateTableEntry *head, const unsigned char *packet)
 {
     if (head == NULL || packet == NULL) {
         errno = EINVAL;
@@ -145,8 +175,6 @@ StateTableEntry *lookup_state_table(
         return NULL;
     }
 
-
-    pthread_rwlock_rdlock(rwlock);
     StateTableEntry *current_entry = head;
     while (current_entry != NULL) {
         if (target_entry->protocol != current_entry->protocol) {
@@ -209,12 +237,38 @@ StateTableEntry *lookup_state_table(
 
         free(target_entry->proto_info);
         free(target_entry);
-        pthread_rwlock_unlock(rwlock);
         return current_entry;
     }
 
     free(target_entry->proto_info);
     free(target_entry);
-    pthread_rwlock_unlock(rwlock);
     return NULL;
+}
+
+void cleanup_expired_entries(StateTableEntry **head)
+{
+    StateTableEntry *current_entry = *head;
+    while (current_entry != NULL) {
+        StateTableEntry *next_entry = current_entry->next;
+        if (check_entry_timeout(current_entry) == true) {
+            delete_entry(head, current_entry);
+        }
+        current_entry = next_entry;
+    }
+}
+
+void destroy_state_table(StateTableEntry **head)
+{
+    if (head == NULL || *head == NULL) {
+        return;
+    }
+
+    StateTableEntry *current_entry = *head;
+    while (current_entry != NULL) {
+        StateTableEntry *tmp_entry = current_entry->next;
+        free(current_entry->proto_info);
+        free(current_entry);
+        current_entry = tmp_entry;
+    }
+    *head = NULL;
 }

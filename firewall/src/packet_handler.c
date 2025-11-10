@@ -58,14 +58,32 @@ int handle_input_packet(
         }
     }
 
-    // パケットを検証する
-    PacketEvalInfo pkt_info = { packet, *head, rules, rule_count, policy };
-    PacketResult result = judge_packet(&pkt_info, rwlock);
-    if (pkt_info.match_index != -1) { // パケットと一致するルールが存在した
-        match_rule = &rules[pkt_info.match_index];
-        log_flag = match_rule->log;
+    // ステートテーブルからパケットを検証する
+    pthread_rwlock_wrlock(rwlock);
+    PacketResult result = PACKET_DROP;
+    StateTableEntry *match_entry = lookup_state_table(*head, packet);
+    if (match_entry != NULL) {
+        if (check_entry_timeout(match_entry) == true) {
+            delete_entry(head, match_entry);
+        } else {
+            match_entry->last_activity = time(NULL);
+            result = PACKET_ACCEPT;
+        }
     }
-    
+    pthread_rwlock_unlock(rwlock);
+
+    if (result == PACKET_DROP) {
+        // ルールからパケットを検証する
+        pthread_rwlock_rdlock(rwlock);
+        PacketEvalInfo pkt_info = { packet, rules, rule_count, policy };
+        result = judge_packet(&pkt_info);
+        if (pkt_info.match_index != -1) { // パケットと一致するルールが存在した場合
+            match_rule = &rules[pkt_info.match_index];
+            log_flag = match_rule->log;
+        }
+        pthread_rwlock_unlock(rwlock);
+    }
+
     if (log_flag == LOG_ENABLED) {
         log_packet(log_fp, packet, match_rule, policy);
     }
@@ -125,19 +143,41 @@ int handle_output_packet(
             log_packet(log_fp, packet, match_rule, policy);
         }
         if (policy == ACTION_ACCEPT) {
-            insert_state_entry(head, packet, rwlock);
+            pthread_rwlock_wrlock(rwlock);
+            insert_state_entry(head, packet);
+            pthread_rwlock_unlock(rwlock);
             return nfq_set_verdict(qh, packet_id, NF_ACCEPT, 0, NULL);
         } else {
             return nfq_set_verdict(qh, packet_id, NF_DROP, 0, NULL);
         }
     }
 
-    // パケットを検証する
-    PacketEvalInfo pkt_info = { packet, *head, rules, rule_count, policy };
-    PacketResult result = judge_packet(&pkt_info, rwlock);
-    if (pkt_info.match_index != -1) { // パケットと一致するルールが存在した
-        match_rule = &rules[pkt_info.match_index];
-        log_flag = match_rule->log;
+    // ステートテーブルからパケットを検証する
+    pthread_rwlock_wrlock(rwlock);
+    PacketResult result = PACKET_DROP;
+    bool exists_entry = false;
+    StateTableEntry *match_entry = lookup_state_table(*head, packet);
+    if (match_entry != NULL) {
+        if (check_entry_timeout(match_entry) == true) {
+            delete_entry(head, match_entry);
+        } else {
+            match_entry->last_activity = time(NULL);
+            exists_entry = true;
+            result = PACKET_ACCEPT;
+        }
+    }
+    pthread_rwlock_unlock(rwlock);
+
+    if (result == PACKET_DROP) {
+        // ルールからパケットを検証する
+        pthread_rwlock_rdlock(rwlock);
+        PacketEvalInfo pkt_info = { packet, rules, rule_count, policy };
+        result = judge_packet(&pkt_info);
+        if (pkt_info.match_index != -1) { // パケットと一致するルールが存在した場合
+            match_rule = &rules[pkt_info.match_index];
+            log_flag = match_rule->log;
+        }
+        pthread_rwlock_unlock(rwlock);
     }
 
     if (log_flag == LOG_ENABLED) {
@@ -146,7 +186,11 @@ int handle_output_packet(
 
     switch (result) {
         case PACKET_ACCEPT:
-            insert_state_entry(head, packet, rwlock);
+            if (exists_entry == false) {
+                pthread_rwlock_wrlock(rwlock);
+                insert_state_entry(head, packet);
+                pthread_rwlock_unlock(rwlock);
+            }
             return nfq_set_verdict(qh, packet_id, NF_ACCEPT, 0, NULL);
             break; // NOT REACHED
         case PACKET_DROP:

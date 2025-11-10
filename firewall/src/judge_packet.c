@@ -8,19 +8,13 @@
 #include "firewall_parser.h"
 #include "stateful_inspection.h"
 
-PacketResult judge_packet(PacketEvalInfo *pkt_info, pthread_rwlock_t *rwlock)
+PacketResult judge_packet(PacketEvalInfo *pkt_info)
 {
     unsigned char *packet = pkt_info->packet;
-    StateTableEntry *head = pkt_info->head;
     FirewallRule *rules = pkt_info->rules;
     size_t rule_count = pkt_info->rule_count;
     ActionType policy = pkt_info->policy;
     pkt_info->match_index = -1;
-
-    if (lookup_state_table(head, packet, rwlock) != NULL) {
-        // ステートテーブルからパケットの情報と一致するエントリーが見つかったら許可
-        return PACKET_ACCEPT;
-    }
 
     struct iphdr *ip_hdr = (struct iphdr *)packet;
     ProtocolType protocol = get_protocol_from_number(ip_hdr->protocol);
@@ -40,7 +34,6 @@ PacketResult judge_packet(PacketEvalInfo *pkt_info, pthread_rwlock_t *rwlock)
     }
 
     // パケットとルールを一つずつ比較
-    pthread_rwlock_rdlock(rwlock);
     for (int i = 0; i < rule_count; i++) {
         if (protocol != rules[i].protocol && rules[i].protocol != PROTO_ANY) {
             continue;
@@ -64,11 +57,9 @@ PacketResult judge_packet(PacketEvalInfo *pkt_info, pthread_rwlock_t *rwlock)
         }
 
         pkt_info->match_index = i;
-        pthread_rwlock_unlock(rwlock);
         return (rules[i].action == ACTION_ACCEPT) ? PACKET_ACCEPT : PACKET_DROP;
     }
 
     // どのルールにもマッチしなければポリシーに従いパケットを処理
-    pthread_rwlock_unlock(rwlock);
     return (policy == ACTION_ACCEPT) ? PACKET_ACCEPT : PACKET_DROP;
 }
