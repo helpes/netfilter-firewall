@@ -11,6 +11,12 @@
 #include "stateful_inspection.h"
 #include "firewall_config.h"
 
+static StateUpdateResult update_tcp_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
+);
+
 bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
 {
     StateTableEntry *entry = NULL;
@@ -49,6 +55,8 @@ bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
             }
             tcp_info->src_port = tcp_hdr->th_sport;
             tcp_info->dst_port = tcp_hdr->th_dport;
+            tcp_info->fwd_fin = 0;
+            tcp_info->rcv_fin = 0;
             entry->proto_info = tcp_info;
             break;
         case IPPROTO_UDP:
@@ -271,4 +279,77 @@ void destroy_state_table(StateTableEntry **head)
         current_entry = tmp_entry;
     }
     *head = NULL;
+}
+
+StateUpdateResult track_connection_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
+)
+{
+    if (check_entry_timeout(entry_to_update) == true) {
+        delete_entry(head, entry_to_update);
+        return STATE_TIMED_OUT;
+    }
+
+    struct iphdr *ip_hdr = (struct iphdr *)packet;
+    switch (ip_hdr->protocol) {
+        case IPPROTO_ICMP:
+            entry_to_update->last_activity = time(NULL);
+            return STATE_UPDATED;
+            break; // NOT REACHED
+        case IPPROTO_TCP:
+            return update_tcp_state(head, entry_to_update, packet);
+            break; // NOT REACHED
+        case IPPROTO_UDP:
+            entry_to_update->last_activity = time(NULL);
+            return STATE_UPDATED;
+            break; // NOT REACHED
+        default:
+            delete_entry(head, entry_to_update);
+            return STATE_TERMINATED;
+            break; // NOT REACHED
+    }
+}
+
+static StateUpdateResult update_tcp_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
+)
+{
+    struct iphdr *ip_hdr = (struct iphdr *)packet;
+    size_t ip_hdr_len = ip_hdr->ihl * 4;
+    struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + ip_hdr_len);
+    TcpState *tcp_info = entry_to_update->proto_info;
+
+    // RSTフラグ（強制終了）を検知
+    if (tcp_hdr->rst == 1) {
+        delete_entry(head, entry_to_update);
+        return STATE_TERMINATED;
+    }
+
+    // FINフラグがすべて立っている状態で、ACKフラグを検知した場合、
+    // TCPの接続が切断されたと見なし、エントリーを削除する
+    if (tcp_hdr->ack == 1) {
+        if (tcp_info->fwd_fin == 1 && tcp_info->rcv_fin == 1) {
+            delete_entry(head, entry_to_update);
+            return STATE_TERMINATED;
+        }
+    }
+
+    // FINフラグを記録
+    if (tcp_hdr->fin == 1) {
+        if (entry_to_update->src_ip == ip_hdr->saddr) {
+            // 順方向のパケットでFINフラグを検知
+            tcp_info->fwd_fin = 1;
+        } else {
+            // 逆方向のパケットでFINフラグを検知
+            tcp_info->rcv_fin = 1;
+        }
+    }
+
+    // 最終アクティブ時間を更新して接続維持
+    entry_to_update->last_activity = time(NULL);
+    return STATE_UPDATED;
 }
