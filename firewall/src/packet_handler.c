@@ -8,7 +8,7 @@
 #include "stateful_inspection.h"
 #include "packet_handler.h"
 #include "judge_packet.h"
-#include "log_packet.h"
+#include "packet_log.h"
 
 int handle_input_packet(
     struct nfq_q_handle *qh,

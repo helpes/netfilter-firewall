@@ -1,5 +1,5 @@
-#ifndef LOG_PACKET_H
-#define LOG_PACKET_H
+#ifndef PACKET_LOG_H
+#define PACKET_LOG_H
 
 #include <stdio.h>
 #include "firewall_config.h"
