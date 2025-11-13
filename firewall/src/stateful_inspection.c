@@ -17,9 +17,40 @@ static StateUpdateResult update_tcp_state(
     const unsigned char *packet
 );
 
+static StateUpdateResult update_icmp_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
+);
+
+static bool is_matching_icmp_session(IcmpState *packet, IcmpState *entry);
+
+bool is_state_tracking_required(const unsigned char *packet)
+{
+    struct iphdr *ip_hdr = (struct iphdr *)packet;
+    size_t ip_hdr_len = ip_hdr->ihl * 4;
+
+    if (ip_hdr->protocol == IPPROTO_TCP || ip_hdr->protocol == IPPROTO_UDP) {
+        return true;
+    }
+
+    if (ip_hdr->protocol == IPPROTO_ICMP) {
+        struct icmphdr *icmp_hdr = (struct icmphdr *)(packet + ip_hdr_len);
+        uint8_t type = icmp_hdr->type;
+
+        // ICMPは応答が必要なタイプだけトラッキングする
+        if (type == ICMP_ECHO || type == ICMP_TIMESTAMP) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
 {
     StateTableEntry *entry = NULL;
+    IcmpState *icmp_info = NULL;
     TcpState *tcp_info = NULL;
     UdpState *udp_info = NULL;
     bool ret = false;
@@ -45,7 +76,15 @@ bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
 
     switch (entry->protocol) {
         case IPPROTO_ICMP:
-            entry->proto_info = NULL;
+            struct icmphdr *icmp_hdr = (struct icmphdr *)(packet + ip_hdr_len);
+            icmp_info = malloc(sizeof(IcmpState));
+            if (icmp_info == NULL) {
+                goto cleanup;
+            }
+            icmp_info->type = icmp_hdr->type;
+            icmp_info->id = icmp_hdr->un.echo.id;
+            icmp_info->sequence = icmp_hdr->un.echo.sequence;
+            entry->proto_info = icmp_info;
             break;
         case IPPROTO_TCP:
             struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + ip_hdr_len);
@@ -80,6 +119,7 @@ bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet)
     if (ret == true) {
         *entry_out = entry;
     } else {
+        free(icmp_info);
         free(tcp_info);
         free(udp_info);
         free(entry);
@@ -206,6 +246,12 @@ StateTableEntry *lookup_state_table(StateTableEntry *head, const unsigned char *
 
         switch (target_entry->protocol) {
             case IPPROTO_ICMP:
+                IcmpState *target_icmp = target_entry->proto_info;
+                IcmpState *current_icmp = current_entry->proto_info;
+                if (is_matching_icmp_session(target_icmp, current_icmp) == false) {
+                    current_entry = current_entry->next;
+                    continue;
+                }
                 break;
             case IPPROTO_TCP:
                 TcpState *target_tcp = target_entry->proto_info;
@@ -295,8 +341,7 @@ StateUpdateResult track_connection_state(
     struct iphdr *ip_hdr = (struct iphdr *)packet;
     switch (ip_hdr->protocol) {
         case IPPROTO_ICMP:
-            entry_to_update->last_activity = time(NULL);
-            return STATE_UPDATED;
+            return update_icmp_state(head, entry_to_update, packet);
             break; // NOT REACHED
         case IPPROTO_TCP:
             return update_tcp_state(head, entry_to_update, packet);
@@ -352,4 +397,54 @@ static StateUpdateResult update_tcp_state(
     // 最終アクティブ時間を更新して接続維持
     entry_to_update->last_activity = time(NULL);
     return STATE_UPDATED;
+}
+
+static StateUpdateResult update_icmp_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
+)
+{
+    struct iphdr *ip_hdr = (struct iphdr *)packet;
+    size_t ip_hdr_len = ip_hdr->ihl * 4;
+    struct icmphdr *icmp_hdr = (struct icmphdr *)(packet + ip_hdr_len);
+    IcmpState *icmp_info = entry_to_update->proto_info;
+    uint16_t packet_sequence = ntohs(icmp_hdr->un.echo.sequence);
+    uint16_t entry_sequence = ntohs(icmp_info->sequence);
+
+    if (icmp_info->type == icmp_hdr->type) {
+        icmp_info->sequence = icmp_hdr->un.echo.sequence;
+        entry_to_update->last_activity = time(NULL);
+        return STATE_UPDATED;
+    } else {
+        if (packet_sequence < entry_sequence) {
+            // パケットのシーケンス番号がエントリーよりも低い場合、
+            // 遅延している可能性があるためエントリーは削除しない
+            entry_to_update->last_activity = time(NULL);
+            return STATE_UPDATED;
+        } else {
+            // 要求に対する応答の場合、エントリーは削除
+            delete_entry(head, entry_to_update);
+            return STATE_TERMINATED;
+        }
+    }
+}
+
+static bool is_matching_icmp_session(IcmpState *packet, IcmpState *entry)
+{
+    bool is_type_match = (packet->type == entry->type);
+    bool is_type_pair = (
+        (entry->type == ICMP_ECHO && packet->type == ICMP_ECHOREPLY) ||
+        (entry->type == ICMP_TIMESTAMP && packet->type == ICMP_TIMESTAMPREPLY)
+    );
+
+    if (is_type_match == false && is_type_pair == false) {
+        return false;
+    }
+
+    if (packet->id != entry->id) {
+        return false;
+    }
+
+    return true;
 }

@@ -21,6 +21,12 @@ typedef struct StateTableEntry {
 } StateTableEntry;
 
 typedef struct {
+    uint8_t type;
+    uint16_t id;
+    uint16_t sequence;
+} IcmpState;
+
+typedef struct {
     uint16_t src_port;
     uint16_t dst_port;
     uint16_t fwd_fin:1;
@@ -38,6 +44,7 @@ typedef enum {
     STATE_TIMED_OUT
 } StateUpdateResult;
 
+bool is_state_tracking_required(const unsigned char *packet);
 bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet);
 bool insert_state_entry(StateTableEntry **head, const unsigned char *packet);
 void delete_entry(StateTableEntry **head, StateTableEntry *entry_to_delete);

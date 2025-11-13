@@ -150,9 +150,11 @@ int handle_output_packet(
             log_packet(log_fp, packet, match_rule, policy);
         }
         if (policy == ACTION_ACCEPT) {
-            pthread_rwlock_wrlock(rwlock);
-            insert_state_entry(head, packet);
-            pthread_rwlock_unlock(rwlock);
+            if (is_state_tracking_required(packet) == true) {
+                pthread_rwlock_wrlock(rwlock);
+                insert_state_entry(head, packet);
+                pthread_rwlock_unlock(rwlock);
+            }
             return nfq_set_verdict(qh, packet_id, NF_ACCEPT, 0, NULL);
         } else {
             return nfq_set_verdict(qh, packet_id, NF_DROP, 0, NULL);
@@ -199,9 +201,11 @@ int handle_output_packet(
     switch (packet_result) {
         case PACKET_ACCEPT:
             if (match_entry == NULL) {
-                pthread_rwlock_wrlock(rwlock);
-                insert_state_entry(head, packet);
-                pthread_rwlock_unlock(rwlock);
+                if (is_state_tracking_required(packet) == true) {
+                    pthread_rwlock_wrlock(rwlock);
+                    insert_state_entry(head, packet);
+                    pthread_rwlock_unlock(rwlock);
+                }
             }
             return nfq_set_verdict(qh, packet_id, NF_ACCEPT, 0, NULL);
             break; // NOT REACHED
