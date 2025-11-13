@@ -11,6 +11,7 @@
 #include "nfq_config.h"
 #include "firewall_io.h"
 #include "domain_socket_utils.h"
+#include "stateful_inspection.h"
 
 extern sig_atomic_t termination_flag;
 
@@ -35,6 +36,25 @@ void *nfq_handler_thread(void *arg)
     }
 
     return NULL;
+}
+
+void *state_table_cleaner_thread(void *arg)
+{
+    StateTableCleanerArgs *args = (StateTableCleanerArgs *)arg;
+    pthread_rwlock_t *rwlock = args->rwlock;
+    StateTableEntry **head = args->head;
+
+    while (1) {
+        for (int i = 0; i < STATE_TABLE_CLEANER_INTERVAL_SEC; i++) {
+            if (termination_flag == 1) {
+                return NULL;
+            }
+            sleep(1);
+        }
+        pthread_rwlock_wrlock(rwlock);
+        cleanup_expired_entries(head);
+        pthread_rwlock_unlock(rwlock);
+    }
 }
 
 void *command_listener_thread(void *arg)

@@ -7,6 +7,7 @@
 #define MIN_OUTPUT_QUEUE_NUMBER 2
 #define MAX_OUTPUT_QUEUE_NUMBER 3
 #define Q_HANDLE_LEN (MAX_OUTPUT_QUEUE_NUMBER + 1)
-#define THREAD_LEN (Q_HANDLE_LEN + 1) // +1は、ドメインソケットを監視するスレッド
+// +2は、state_table_cleaner_threadと、command_listener_thread
+#define THREAD_LEN (Q_HANDLE_LEN + 2)
 
 #endif

@@ -3,8 +3,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <pthread.h>
 #include <time.h>
+
+#define TCP_CONNECTION_TIMEOUT_SEC 300
+#define UDP_CONNECTION_TIMEOUT_SEC 60
+#define ICMP_CONNECTION_TIMEOUT_SEC 10
+#define STATE_TABLE_CLEANER_INTERVAL_SEC 30
 
 typedef struct StateTableEntry {
     uint8_t protocol;
@@ -13,11 +17,20 @@ typedef struct StateTableEntry {
     void *proto_info;
     time_t last_activity;
     struct StateTableEntry *next;
+    struct StateTableEntry *prev;
 } StateTableEntry;
+
+typedef struct {
+    uint8_t type;
+    uint16_t id;
+    uint16_t sequence;
+} IcmpState;
 
 typedef struct {
     uint16_t src_port;
     uint16_t dst_port;
+    uint16_t fwd_fin:1;
+    uint16_t rcv_fin:1;
 } TcpState;
 
 typedef struct {
@@ -25,17 +38,24 @@ typedef struct {
     uint16_t dst_port;
 } UdpState;
 
+typedef enum {
+    STATE_UPDATED,
+    STATE_TERMINATED,
+    STATE_TIMED_OUT
+} StateUpdateResult;
+
+bool is_state_tracking_required(const unsigned char *packet);
 bool init_state_entry(StateTableEntry **entry_out, const unsigned char *packet);
-bool insert_state_entry(
-    StateTableEntry **head,
-    const unsigned char *packet,
-    pthread_rwlock_t *rwlock
-);
+bool insert_state_entry(StateTableEntry **head, const unsigned char *packet);
+void delete_entry(StateTableEntry **head, StateTableEntry *entry_to_delete);
+bool check_entry_timeout(StateTableEntry *entry_to_check);
+StateTableEntry *lookup_state_table(StateTableEntry *head, const unsigned char *packet);
+void cleanup_expired_entries(StateTableEntry **head);
 void destroy_state_table(StateTableEntry **head);
-StateTableEntry *lookup_state_table(
-    StateTableEntry *head,
-    const unsigned char *packet,
-    pthread_rwlock_t *rwlock
+StateUpdateResult track_connection_state(
+    StateTableEntry **head,
+    StateTableEntry *entry_to_update,
+    const unsigned char *packet
 );
 
 #endif

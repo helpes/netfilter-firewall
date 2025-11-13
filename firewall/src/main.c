@@ -132,6 +132,10 @@ int main(void)
     NfqHandlerArgs nfq_handler_args = {
         h
     };
+    StateTableCleanerArgs state_table_cleaner_args= {
+        rwlock,
+        &head
+    };
     CmdListenerArgs cmd_listener_args = {
         rwlock,
         domain_sock,
@@ -145,18 +149,19 @@ int main(void)
 
     // スレッドの作成
     pthread_t threads[THREAD_LEN];
-    for (int i = 0; i < THREAD_LEN; i++) {
-        if (i != THREAD_LEN - 1) {
-            if (pthread_create(&threads[i], NULL, nfq_handler_thread,
-                               &nfq_handler_args) != 0) {
-                goto cleanup;
-            }
-        } else {
-            if (pthread_create(&threads[i], NULL, command_listener_thread,
-                               &cmd_listener_args) != 0) {
-                goto cleanup;
-            }
+    for (int i = 0; i < Q_HANDLE_LEN; i++) {
+        if (pthread_create(&threads[i], NULL, nfq_handler_thread,
+                           &nfq_handler_args) != 0) {
+            goto cleanup;
         }
+    }
+    if (pthread_create(&threads[Q_HANDLE_LEN], NULL, state_table_cleaner_thread,
+                       &state_table_cleaner_args) != 0) {
+        goto cleanup;
+    }
+    if (pthread_create(&threads[Q_HANDLE_LEN + 1], NULL, command_listener_thread,
+                       &cmd_listener_args) != 0) {
+        goto cleanup;
     }
 
     // スレッドの終了を待機
