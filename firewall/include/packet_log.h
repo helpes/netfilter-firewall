@@ -7,6 +7,7 @@
 void log_packet(
     FILE **log_fp,
     const unsigned char *packet,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 );

@@ -21,6 +21,7 @@ static bool format_icmp_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 );
@@ -30,6 +31,7 @@ static bool format_tcpudp_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 );
@@ -39,6 +41,7 @@ static bool format_other_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 );
@@ -48,6 +51,7 @@ bool log_rotation(FILE **log_fp, int rotate, int rotation_size_mb);
 void log_packet(
     FILE **log_fp,
     const unsigned char *packet,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 )
@@ -70,20 +74,20 @@ void log_packet(
     // プロトコル別にログを取得
     switch (ip_hdr->protocol) {
         case IPPROTO_ICMP:
-            if (format_icmp_log(packet, log, sizeof(log), timestamp,
+            if (format_icmp_log(packet, log, sizeof(log), timestamp, chain_type,
                                 match_rule, policy) == false) {
                 goto cleanup;
             }
             break;
         case IPPROTO_TCP: // TCPはUDPと同じ関数でログを取る
         case IPPROTO_UDP:
-            if (format_tcpudp_log(packet, log, sizeof(log), timestamp,
+            if (format_tcpudp_log(packet, log, sizeof(log), timestamp, chain_type,
                                   match_rule, policy) == false) {
                 goto cleanup;
             }
             break;
         default:
-            if (format_other_log(packet, log, sizeof(log), timestamp,
+            if (format_other_log(packet, log, sizeof(log), timestamp, chain_type,
                                  match_rule, policy) == false) {
                 goto cleanup;
             }
@@ -119,12 +123,14 @@ static bool format_icmp_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 )
 {
     struct iphdr *ip_hdr = (struct iphdr *)packet;
     struct icmphdr *icmp_hdr = (struct icmphdr *)(packet + ip_hdr->ihl * 4);
+    char *chain = (chain_type == CHAIN_INPUT) ? "INPUT" : "OUTPUT";
     char *rule = (match_rule != NULL) ? match_rule->original : "NoRule";
     unsigned char type = icmp_hdr->type;
     unsigned char code = icmp_hdr->code;
@@ -148,8 +154,8 @@ static bool format_icmp_log(
 
     snprintf(
         log_out, log_len,
-        "[%s] %s ICMP %s -> %s [TYPE: %d, CODE: %d] rule:[%s]\n",
-        timestamp, action, src_ip, dst_ip, type, code, rule
+        "[%s] %s %s ICMP %s -> %s [TYPE: %d, CODE: %d] rule:[%s]\n",
+        timestamp, chain, action, src_ip, dst_ip, type, code, rule
     );
 
     return true;
@@ -160,11 +166,13 @@ static bool format_tcpudp_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 )
 {
     struct iphdr *ip_hdr = (struct iphdr *)packet;
+    char *chain = (chain_type == CHAIN_INPUT) ? "INPUT" : "OUTPUT";
     char *rule = (match_rule != NULL) ? match_rule->original : "NoRule";
     char *protocol = (ip_hdr->protocol == IPPROTO_TCP) ? "TCP" : "UDP";
     char src_ip[INET_ADDRSTRLEN];
@@ -190,8 +198,8 @@ static bool format_tcpudp_log(
 
     snprintf(
         log_out, log_len,
-        "[%s] %s %s %s:%d -> %s:%d rule:[%s]\n",
-        timestamp, action, protocol, src_ip, src_port,
+        "[%s] %s %s %s %s:%d -> %s:%d rule:[%s]\n",
+        timestamp, chain, action, protocol, src_ip, src_port,
         dst_ip, dst_port, rule
     );
 
@@ -203,11 +211,13 @@ static bool format_other_log(
     char *log_out,
     size_t log_len,
     const char *timestamp,
+    ChainType chain_type,
     FirewallRule *match_rule,
     ActionType policy
 )
 {
     struct iphdr *ip_hdr = (struct iphdr *)packet;
+    char *chain = (chain_type == CHAIN_INPUT) ? "INPUT" : "OUTPUT";
     char *rule = (match_rule != NULL) ? match_rule->original : "NoRule";
     int proto_num = (int)ip_hdr->protocol;
     char src_ip[INET_ADDRSTRLEN];
@@ -230,8 +240,8 @@ static bool format_other_log(
 
     snprintf(
         log_out, log_len,
-        "[%s] %s PROTOCOL NUMBER:%d %s -> %s rule:[%s]\n",
-        timestamp, action, proto_num, src_ip, dst_ip, rule
+        "[%s] %s %s PROTOCOL NUMBER:%d %s -> %s rule:[%s]\n",
+        timestamp, chain, action, proto_num, src_ip, dst_ip, rule
     );
 
     return true;

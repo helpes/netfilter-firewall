@@ -49,7 +49,7 @@ int handle_input_packet(
     // ルールが存在しないことが判明した時点でパケットをポリシーに従い処理する
     if ((rules == NULL || rule_count == 0) && *head == NULL) {
         if (log_flag == LOG_ENABLED) {
-            log_packet(log_fp, packet, match_rule, policy);
+            log_packet(log_fp, packet, CHAIN_INPUT, match_rule, policy);
         }
         if (policy == ACTION_ACCEPT) {
             return nfq_set_verdict(qh, packet_id, NF_ACCEPT, 0, NULL);
@@ -92,7 +92,7 @@ int handle_input_packet(
     }
 
     if (log_flag == LOG_ENABLED) {
-        log_packet(log_fp, packet, match_rule, policy);
+        log_packet(log_fp, packet, CHAIN_INPUT, match_rule, policy);
     }
 
     switch (packet_result) {
@@ -147,7 +147,7 @@ int handle_output_packet(
     // ルールが存在しないことが判明した時点でパケットをポリシーに従い処理する
     if ((rules == NULL || rule_count == 0) && *head == NULL) {
         if (log_flag == LOG_ENABLED) {
-            log_packet(log_fp, packet, match_rule, policy);
+            log_packet(log_fp, packet, CHAIN_OUTPUT, match_rule, policy);
         }
         if (policy == ACTION_ACCEPT) {
             if (is_state_tracking_required(packet) == true) {
@@ -195,7 +195,7 @@ int handle_output_packet(
     }
 
     if (log_flag == LOG_ENABLED) {
-        log_packet(log_fp, packet, match_rule, policy);
+        log_packet(log_fp, packet, CHAIN_OUTPUT, match_rule, policy);
     }
 
     switch (packet_result) {
